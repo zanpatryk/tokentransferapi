@@ -1,0 +1,22 @@
+type Wallet {
+  address: ID!
+  balance: BigInt!
+  createdAt: Time!
+  updatedAt: Time!
+}
+
+type Query {
+  # Fetch wallet by its address
+  wallet(address: ID!): Wallet
+
+  # List all wallets in the system
+  wallets: [Wallet!]!
+}
+
+type Mutation {
+  # Transfer `amount` tokens from one address to another
+  transfer(from_address: ID!, to_address: ID!, amount: BigInt!): Wallet!
+}
+
+scalar BigInt
+scalar Time
