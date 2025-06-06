@@ -64,7 +64,7 @@ type ComplexityRoot struct {
 }
 
 type MutationResolver interface {
-	Transfer(ctx context.Context, fromAddress string, transfers []*TransferInput) (string, error)
+	Transfer(ctx context.Context, fromAddress string, transfers []*TransferInput) (int, error)
 }
 type QueryResolver interface {
 	Wallet(ctx context.Context, address string) (*Wallet, error)
@@ -543,9 +543,9 @@ func (ec *executionContext) _Mutation_transfer(ctx context.Context, field graphq
 		}
 		return graphql.Null
 	}
-	res := resTmp.(string)
+	res := resTmp.(int)
 	fc.Result = res
-	return ec.marshalNBigInt2string(ctx, field.Selections, res)
+	return ec.marshalNBigInt2int(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_transfer(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -889,9 +889,9 @@ func (ec *executionContext) _Wallet_balance(ctx context.Context, field graphql.C
 		}
 		return graphql.Null
 	}
-	res := resTmp.(string)
+	res := resTmp.(int)
 	fc.Result = res
-	return ec.marshalNBigInt2string(ctx, field.Selections, res)
+	return ec.marshalNBigInt2int(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Wallet_balance(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -2969,7 +2969,7 @@ func (ec *executionContext) unmarshalInputTransferInput(ctx context.Context, obj
 			it.ToAddress = data
 		case "amount":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("amount"))
-			data, err := ec.unmarshalNBigInt2string(ctx, v)
+			data, err := ec.unmarshalNBigInt2int(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -3517,14 +3517,14 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 
 // region    ***************************** type.gotpl *****************************
 
-func (ec *executionContext) unmarshalNBigInt2string(ctx context.Context, v any) (string, error) {
-	res, err := graphql.UnmarshalString(v)
+func (ec *executionContext) unmarshalNBigInt2int(ctx context.Context, v any) (int, error) {
+	res, err := graphql.UnmarshalInt(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 
-func (ec *executionContext) marshalNBigInt2string(ctx context.Context, sel ast.SelectionSet, v string) graphql.Marshaler {
+func (ec *executionContext) marshalNBigInt2int(ctx context.Context, sel ast.SelectionSet, v int) graphql.Marshaler {
 	_ = sel
-	res := graphql.MarshalString(v)
+	res := graphql.MarshalInt(v)
 	if res == graphql.Null {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
 			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
