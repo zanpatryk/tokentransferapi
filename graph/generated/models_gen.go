@@ -12,6 +12,11 @@ type Mutation struct {
 type Query struct {
 }
 
+type TransferInput struct {
+	ToAddress string `json:"to_address"`
+	Amount    string `json:"amount"`
+}
+
 type Wallet struct {
 	Address   string    `json:"address"`
 	Balance   string    `json:"balance"`

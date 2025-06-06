@@ -12,7 +12,7 @@ import (
 )
 
 // Transfer is the resolver for the transfer field.
-func (r *mutationResolver) Transfer(ctx context.Context, fromAddress string, toAddress string, amount string) (*generated.Wallet, error) {
+func (r *mutationResolver) Transfer(ctx context.Context, fromAddress string, transfers []*generated.TransferInput) (string, error) {
 	panic(fmt.Errorf("not implemented: Transfer - transfer"))
 }
 

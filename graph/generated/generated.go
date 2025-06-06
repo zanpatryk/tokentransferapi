@@ -47,7 +47,7 @@ type DirectiveRoot struct {
 
 type ComplexityRoot struct {
 	Mutation struct {
-		Transfer func(childComplexity int, fromAddress string, toAddress string, amount string) int
+		Transfer func(childComplexity int, fromAddress string, transfers []*TransferInput) int
 	}
 
 	Query struct {
@@ -64,7 +64,7 @@ type ComplexityRoot struct {
 }
 
 type MutationResolver interface {
-	Transfer(ctx context.Context, fromAddress string, toAddress string, amount string) (*Wallet, error)
+	Transfer(ctx context.Context, fromAddress string, transfers []*TransferInput) (string, error)
 }
 type QueryResolver interface {
 	Wallet(ctx context.Context, address string) (*Wallet, error)
@@ -100,7 +100,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.Transfer(childComplexity, args["from_address"].(string), args["to_address"].(string), args["amount"].(string)), true
+		return e.complexity.Mutation.Transfer(childComplexity, args["from_address"].(string), args["transfers"].([]*TransferInput)), true
 
 	case "Query.wallet":
 		if e.complexity.Query.Wallet == nil {
@@ -156,7 +156,9 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 	opCtx := graphql.GetOperationContext(ctx)
 	ec := executionContext{opCtx, e, 0, 0, make(chan graphql.DeferredResult)}
-	inputUnmarshalMap := graphql.BuildUnmarshalerMap()
+	inputUnmarshalMap := graphql.BuildUnmarshalerMap(
+		ec.unmarshalInputTransferInput,
+	)
 	first := true
 
 	switch opCtx.Operation.Operation {
@@ -268,9 +270,14 @@ type Query {
   wallets: [Wallet!]!
 }
 
+input TransferInput {
+  to_address: ID!
+  amount: BigInt!
+}
+
 type Mutation {
-  # Transfer ` + "`" + `amount` + "`" + ` tokens from one address to another
-  transfer(from_address: ID!, to_address: ID!, amount: BigInt!): Wallet!
+  # Transfer multiple amounts from one wallet to multiple recipients, atomically
+  transfer(from_address: ID!, transfers: [TransferInput!]!): BigInt!
 }
 
 scalar BigInt
@@ -291,16 +298,11 @@ func (ec *executionContext) field_Mutation_transfer_args(ctx context.Context, ra
 		return nil, err
 	}
 	args["from_address"] = arg0
-	arg1, err := ec.field_Mutation_transfer_argsToAddress(ctx, rawArgs)
+	arg1, err := ec.field_Mutation_transfer_argsTransfers(ctx, rawArgs)
 	if err != nil {
 		return nil, err
 	}
-	args["to_address"] = arg1
-	arg2, err := ec.field_Mutation_transfer_argsAmount(ctx, rawArgs)
-	if err != nil {
-		return nil, err
-	}
-	args["amount"] = arg2
+	args["transfers"] = arg1
 	return args, nil
 }
 func (ec *executionContext) field_Mutation_transfer_argsFromAddress(
@@ -321,39 +323,21 @@ func (ec *executionContext) field_Mutation_transfer_argsFromAddress(
 	return zeroVal, nil
 }
 
-func (ec *executionContext) field_Mutation_transfer_argsToAddress(
+func (ec *executionContext) field_Mutation_transfer_argsTransfers(
 	ctx context.Context,
 	rawArgs map[string]any,
-) (string, error) {
-	if _, ok := rawArgs["to_address"]; !ok {
-		var zeroVal string
+) ([]*TransferInput, error) {
+	if _, ok := rawArgs["transfers"]; !ok {
+		var zeroVal []*TransferInput
 		return zeroVal, nil
 	}
 
-	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("to_address"))
-	if tmp, ok := rawArgs["to_address"]; ok {
-		return ec.unmarshalNID2string(ctx, tmp)
+	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("transfers"))
+	if tmp, ok := rawArgs["transfers"]; ok {
+		return ec.unmarshalNTransferInput2ᚕᚖgithubᚗcomᚋzanpatrykᚋtokentransferapiᚋgraphᚋgeneratedᚐTransferInputᚄ(ctx, tmp)
 	}
 
-	var zeroVal string
-	return zeroVal, nil
-}
-
-func (ec *executionContext) field_Mutation_transfer_argsAmount(
-	ctx context.Context,
-	rawArgs map[string]any,
-) (string, error) {
-	if _, ok := rawArgs["amount"]; !ok {
-		var zeroVal string
-		return zeroVal, nil
-	}
-
-	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("amount"))
-	if tmp, ok := rawArgs["amount"]; ok {
-		return ec.unmarshalNBigInt2string(ctx, tmp)
-	}
-
-	var zeroVal string
+	var zeroVal []*TransferInput
 	return zeroVal, nil
 }
 
@@ -547,7 +531,7 @@ func (ec *executionContext) _Mutation_transfer(ctx context.Context, field graphq
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Mutation().Transfer(rctx, fc.Args["from_address"].(string), fc.Args["to_address"].(string), fc.Args["amount"].(string))
+		return ec.resolvers.Mutation().Transfer(rctx, fc.Args["from_address"].(string), fc.Args["transfers"].([]*TransferInput))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -559,9 +543,9 @@ func (ec *executionContext) _Mutation_transfer(ctx context.Context, field graphq
 		}
 		return graphql.Null
 	}
-	res := resTmp.(*Wallet)
+	res := resTmp.(string)
 	fc.Result = res
-	return ec.marshalNWallet2ᚖgithubᚗcomᚋzanpatrykᚋtokentransferapiᚋgraphᚋgeneratedᚐWallet(ctx, field.Selections, res)
+	return ec.marshalNBigInt2string(ctx, field.Selections, res)
 }
 
 func (ec *executionContext) fieldContext_Mutation_transfer(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
@@ -571,17 +555,7 @@ func (ec *executionContext) fieldContext_Mutation_transfer(ctx context.Context, 
 		IsMethod:   true,
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "address":
-				return ec.fieldContext_Wallet_address(ctx, field)
-			case "balance":
-				return ec.fieldContext_Wallet_balance(ctx, field)
-			case "createdAt":
-				return ec.fieldContext_Wallet_createdAt(ctx, field)
-			case "updatedAt":
-				return ec.fieldContext_Wallet_updatedAt(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type Wallet", field.Name)
+			return nil, errors.New("field of type BigInt does not have child fields")
 		},
 	}
 	defer func() {
@@ -2972,6 +2946,40 @@ func (ec *executionContext) fieldContext___Type_isOneOf(_ context.Context, field
 
 // region    **************************** input.gotpl *****************************
 
+func (ec *executionContext) unmarshalInputTransferInput(ctx context.Context, obj any) (TransferInput, error) {
+	var it TransferInput
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"to_address", "amount"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "to_address":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("to_address"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.ToAddress = data
+		case "amount":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("amount"))
+			data, err := ec.unmarshalNBigInt2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Amount = data
+		}
+	}
+
+	return it, nil
+}
+
 // endregion **************************** input.gotpl *****************************
 
 // region    ************************** interface.gotpl ***************************
@@ -3589,8 +3597,24 @@ func (ec *executionContext) marshalNTime2timeᚐTime(ctx context.Context, sel as
 	return res
 }
 
-func (ec *executionContext) marshalNWallet2githubᚗcomᚋzanpatrykᚋtokentransferapiᚋgraphᚋgeneratedᚐWallet(ctx context.Context, sel ast.SelectionSet, v Wallet) graphql.Marshaler {
-	return ec._Wallet(ctx, sel, &v)
+func (ec *executionContext) unmarshalNTransferInput2ᚕᚖgithubᚗcomᚋzanpatrykᚋtokentransferapiᚋgraphᚋgeneratedᚐTransferInputᚄ(ctx context.Context, v any) ([]*TransferInput, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]*TransferInput, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNTransferInput2ᚖgithubᚗcomᚋzanpatrykᚋtokentransferapiᚋgraphᚋgeneratedᚐTransferInput(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) unmarshalNTransferInput2ᚖgithubᚗcomᚋzanpatrykᚋtokentransferapiᚋgraphᚋgeneratedᚐTransferInput(ctx context.Context, v any) (*TransferInput, error) {
+	res, err := ec.unmarshalInputTransferInput(ctx, v)
+	return &res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNWallet2ᚕᚖgithubᚗcomᚋzanpatrykᚋtokentransferapiᚋgraphᚋgeneratedᚐWalletᚄ(ctx context.Context, sel ast.SelectionSet, v []*Wallet) graphql.Marshaler {
