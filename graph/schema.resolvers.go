@@ -9,21 +9,37 @@ import (
 	"fmt"
 
 	"github.com/zanpatryk/tokentransferapi/graph/generated"
+	"github.com/zanpatryk/tokentransferapi/store"
 )
 
 // Transfer is the resolver for the transfer field.
-func (r *mutationResolver) Transfer(ctx context.Context, fromAddress string, toAddress string, amount string) (*generated.Wallet, error) {
-	panic(fmt.Errorf("not implemented: Transfer - transfer"))
+func (r *mutationResolver) Transfer(ctx context.Context, fromAddress string, transfers []*generated.TransferInput) (int, error) {
+	ops := make([]store.TransferOp, len(transfers))
+
+	for i, t := range transfers {
+		ops[i] = store.TransferOp{
+			To:     t.ToAddress,
+			Amount: t.Amount,
+		}
+	}
+
+	newBalance, err := r.Store.Transfer(ctx, fromAddress, ops)
+
+	if err != nil {
+		return newBalance, fmt.Errorf("Transfer failed: %w", err)
+	}
+
+	return newBalance, nil
 }
 
 // Wallet is the resolver for the wallet field.
 func (r *queryResolver) Wallet(ctx context.Context, address string) (*generated.Wallet, error) {
-	panic(fmt.Errorf("not implemented: Wallet - wallet"))
+	return r.Store.GetByAddress(ctx, address)
 }
 
 // Wallets is the resolver for the wallets field.
 func (r *queryResolver) Wallets(ctx context.Context) ([]*generated.Wallet, error) {
-	panic(fmt.Errorf("not implemented: Wallets - wallets"))
+	return r.Store.ListAll(ctx)
 }
 
 // Mutation returns generated.MutationResolver implementation.
