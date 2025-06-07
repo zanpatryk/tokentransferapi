@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -15,7 +16,7 @@ type WalletStore interface {
 
 	CreateIfNotExists(ctx context.Context, address string, initialBalance int) (*generated.Wallet, error)
 
-	Transfer(ctx context.Context, from string, recipients map[string]int) (int, error)
+	Transfer(ctx context.Context, from string, transfers []TransferOp) (int, error)
 }
 
 type InMemWalletStore struct {
@@ -27,6 +28,11 @@ func NewInMemWalletStore() *InMemWalletStore {
 	return &InMemWalletStore{
 		wallets: make(map[string]*generated.Wallet),
 	}
+}
+
+type TransferOp struct {
+	To     string
+	Amount int
 }
 
 func (s *InMemWalletStore) GetByAddress(ctx context.Context, address string) (*generated.Wallet, error) {
@@ -95,7 +101,10 @@ func (s *InMemWalletStore) CreateIfNotExists(ctx context.Context, address string
 	}, nil
 }
 
-func (s *InMemWalletStore) Transfer(ctx context.Context, from string, recipients map[string]int) (int, error) {
+func (s *InMemWalletStore) Transfer(ctx context.Context, from string, transfers []TransferOp) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	senderW, ok := s.wallets[from]
 
 	if !ok {
@@ -103,14 +112,15 @@ func (s *InMemWalletStore) Transfer(ctx context.Context, from string, recipients
 	}
 
 	now := time.Now().UTC()
-	var hadInsufficientFunds bool
+	failed := make([]int, 0, len(transfers))
 
-	for toAddr, rawAmt := range recipients {
+	for _, op := range transfers {
+		toAddr, rawAmt := op.To, op.Amount
 
 		if rawAmt >= 0 {
 
 			if senderW.Balance < rawAmt {
-				hadInsufficientFunds = true
+				failed = append(failed, rawAmt)
 				continue
 			}
 
@@ -118,7 +128,7 @@ func (s *InMemWalletStore) Transfer(ctx context.Context, from string, recipients
 
 			recW, ok := s.wallets[toAddr]
 			if !ok {
-				hadInsufficientFunds = true
+				failed = append(failed, rawAmt)
 				senderW.Balance += rawAmt
 				continue
 			}
@@ -128,14 +138,10 @@ func (s *InMemWalletStore) Transfer(ctx context.Context, from string, recipients
 		} else {
 			absAmt := -rawAmt
 
-			recW, ok := s.wallets[toAddr]
-			if !ok {
-				hadInsufficientFunds = true
-				continue
-			}
+			recW, exists := s.wallets[toAddr]
 
-			if recW.Balance < absAmt {
-				hadInsufficientFunds = true
+			if !exists || recW.Balance < absAmt {
+				failed = append(failed, rawAmt)
 				continue
 			}
 
@@ -148,8 +154,8 @@ func (s *InMemWalletStore) Transfer(ctx context.Context, from string, recipients
 
 	senderW.UpdatedAt = now
 
-	if hadInsufficientFunds {
-		return senderW.Balance, errors.New("Insufficient funds")
+	if len(failed) > 0 {
+		return senderW.Balance, fmt.Errorf("Insufficient funds for transaction(s): %v", failed)
 	}
 
 	return senderW.Balance, nil

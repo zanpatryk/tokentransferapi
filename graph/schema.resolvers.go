@@ -9,17 +9,21 @@ import (
 	"fmt"
 
 	"github.com/zanpatryk/tokentransferapi/graph/generated"
+	"github.com/zanpatryk/tokentransferapi/store"
 )
 
 // Transfer is the resolver for the transfer field.
 func (r *mutationResolver) Transfer(ctx context.Context, fromAddress string, transfers []*generated.TransferInput) (int, error) {
-	recipients := make(map[string]int, len(transfers))
+	ops := make([]store.TransferOp, len(transfers))
 
-	for _, t := range transfers {
-		recipients[t.ToAddress] = t.Amount
+	for i, t := range transfers {
+		ops[i] = store.TransferOp{
+			To:     t.ToAddress,
+			Amount: t.Amount,
+		}
 	}
 
-	newBalance, err := r.Store.Transfer(ctx, fromAddress, recipients)
+	newBalance, err := r.Store.Transfer(ctx, fromAddress, ops)
 
 	if err != nil {
 		return newBalance, fmt.Errorf("Transfer failed: %w", err)
