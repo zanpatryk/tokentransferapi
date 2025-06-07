@@ -13,9 +13,14 @@ type Query {
   wallets: [Wallet!]!
 }
 
+input TransferInput {
+  to_address: ID!
+  amount: BigInt!
+}
+
 type Mutation {
-  # Transfer `amount` tokens from one address to another
-  transfer(from_address: ID!, to_address: ID!, amount: BigInt!): Wallet!
+  # Transfer multiple amounts from one wallet to multiple recipients, atomically
+  transfer(from_address: ID!, transfers: [TransferInput!]!): BigInt!
 }
 
 scalar BigInt
