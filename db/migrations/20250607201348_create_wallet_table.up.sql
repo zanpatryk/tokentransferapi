@@ -1,0 +1,6 @@
+CREATE TABLE wallets (
+    address TEXT PRIMARY KEY,
+    balance NUMERIC NOT NULL DEFAULT 0,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
+    updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
+);
