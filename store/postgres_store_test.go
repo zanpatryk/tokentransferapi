@@ -15,6 +15,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	_ "github.com/lib/pq"
 )
 
 var testStore *PostgresWalletStore
@@ -22,9 +23,7 @@ var dbPool *pgxpool.Pool
 
 func TestMain(m *testing.M) {
 
-	if err := godotenv.Load("../.env"); err != nil {
-		log.Fatalf("Error loading .env: %v", err)
-	}
+	_ = godotenv.Load()
 
 	dbURL := os.Getenv("TEST_DATABASE_URL")
 	if dbURL == "" {
