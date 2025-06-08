@@ -26,7 +26,7 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Error loading .env: %v", err)
 	}
 
-	dbURL := os.Getenv("DATABASE_URL")
+	dbURL := os.Getenv("TEST_DATABASE_URL")
 	if dbURL == "" {
 		log.Fatal("TEST_DATABASE_URL must be set for tests")
 	}
