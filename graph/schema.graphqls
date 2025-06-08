@@ -20,7 +20,7 @@ input TransferInput {
 
 type Mutation {
   # Transfer multiple amounts from one wallet to multiple recipients, atomically
-  transfer(from_address: ID!, transfers: [TransferInput!]!): BigInt!
+  transfer(from_address: ID!, transfers: TransferInput!): BigInt!
 }
 
 scalar BigInt

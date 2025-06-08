@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"time"
 
@@ -54,125 +55,119 @@ func (s *PostgresWalletStore) ListAll(ctx context.Context) ([]*generated.Wallet,
 }
 
 func (s *PostgresWalletStore) CreateIfNotExists(ctx context.Context, addr string, initialBalance int) (*generated.Wallet, error) {
-	_, err := s.db.Exec(ctx,
-		`INSERT INTO wallets(address, balance, created_at, updated_at)
-         VALUES($1, $2, now(), now())
-         ON CONFLICT (address) DO NOTHING`, addr, strconv.Itoa(initialBalance))
-	return &generated.Wallet{
-		Address:   addr,
-		Balance:   initialBalance,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	}, err
+
+	if _, err := s.db.Exec(ctx, `
+        INSERT INTO wallets(address, balance, created_at, updated_at)
+        VALUES ($1, $2, now(), now())
+        ON CONFLICT (address) DO NOTHING
+    `, addr, initialBalance); err != nil {
+		return nil, fmt.Errorf("insert wallet: %w", err)
+	}
+
+	w := &generated.Wallet{}
+	if err := s.db.QueryRow(ctx, `
+        SELECT address, balance, created_at, updated_at
+          FROM wallets
+         WHERE address = $1
+    `, addr).Scan(&w.Address, &w.Balance, &w.CreatedAt, &w.UpdatedAt); err != nil {
+		return nil, fmt.Errorf("fetch wallet: %w", err)
+	}
+
+	return w, nil
 }
 
-func (s *PostgresWalletStore) Transfer(ctx context.Context, from string, ops []TransferOp,
-) (int, error) {
+func (s *PostgresWalletStore) Transfer(ctx context.Context, from string, op TransferOp) (int, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return 0, err
 	}
 	defer tx.Rollback(ctx)
 
-	// Lock sender row up front
-	now := time.Now().UTC()
-	if _, err := tx.Exec(ctx,
-		`SELECT 1 FROM wallets WHERE address = $1 FOR UPDATE`, from,
-	); err != nil {
-		return 0, err
-	}
+	addrs := []string{from, op.To}
+	sort.Strings(addrs)
 
-	failed := make([]int, 0, len(ops))
-
-	for _, op := range ops {
-		amt := op.Amount
-		toAddr := op.To
-
-		switch {
-		case amt >= 0:
-			res, err := tx.Exec(ctx,
-				`UPDATE wallets
-                     SET balance = balance - $1
-                   WHERE address = $2
-                     AND balance >= $1`,
-				amt, from,
-			)
-			if err != nil {
-				return 0, err
-			}
-			if rows := res.RowsAffected(); rows == 0 {
-				failed = append(failed, amt)
-				continue
-			}
-
-			if _, err := tx.Exec(ctx,
-				`INSERT INTO wallets(address, balance, created_at, updated_at)
-                     VALUES($1, 0, now(), now())
-                  ON CONFLICT (address) DO NOTHING`,
-				toAddr,
-			); err != nil {
-				return 0, err
-			}
-			if _, err := tx.Exec(ctx,
-				`SELECT 1 FROM wallets WHERE address = $1 FOR UPDATE`, toAddr,
-			); err != nil {
-				return 0, err
-			}
-
-			if _, err := tx.Exec(ctx,
-				`UPDATE wallets
-                     SET balance = balance + $1,
-                         updated_at = $2
-                   WHERE address = $3`,
-				amt, now, toAddr,
-			); err != nil {
-				return 0, err
-			}
-
-		case amt < 0:
-			absAmt := -amt
-
-			if _, err := tx.Exec(ctx,
-				`SELECT 1 FROM wallets WHERE address = $1 FOR UPDATE`, toAddr,
-			); err != nil {
-				return 0, err
-			}
-
-			res, err := tx.Exec(ctx,
-				`UPDATE wallets
-                     SET balance = balance - $1
-                   WHERE address = $2
-                     AND balance >= $1`,
-				absAmt, toAddr,
-			)
-			if err != nil {
-				return 0, err
-			}
-			if rows := res.RowsAffected(); rows == 0 {
-
-				failed = append(failed, amt)
-				continue
-			}
-
-			if _, err := tx.Exec(ctx,
-				`UPDATE wallets
-                     SET balance = balance + $1,
-                         updated_at = $2
-                   WHERE address = $3`,
-				absAmt, now, from,
-			); err != nil {
-				return 0, err
-			}
+	for _, addr := range addrs {
+		if _, err := tx.Exec(ctx,
+			`SELECT pg_advisory_xact_lock(hashtext($1)::bigint)`, addr,
+		); err != nil {
+			return 0, err
 		}
 	}
 
-	if _, err := tx.Exec(ctx,
-		`UPDATE wallets
-             SET updated_at = $1
-           WHERE address = $2`,
-		now, from,
-	); err != nil {
-		return 0, err
+	now := time.Now().UTC()
+	amount := op.Amount
+
+	if amount >= 0 {
+		res, err := tx.Exec(ctx,
+			`UPDATE wallets
+               SET balance = balance - $1, updated_at = $2
+             WHERE address = $3 AND balance >= $1`,
+			amount, now, from,
+		)
+
+		if err != nil {
+			return 0, err
+		}
+
+		if res.RowsAffected() == 0 {
+			if err := tx.Commit(ctx); err != nil {
+				return 0, err
+			}
+
+			var bal int
+			_ = tx.QueryRow(ctx,
+				`SELECT balance FROM wallets WHERE address = $1`, from,
+			).Scan(&bal)
+
+			return bal, fmt.Errorf("Insufficient funds")
+		}
+
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO wallets(address, balance, created_at, updated_at)
+                 VALUES($1, $2, now(), now())
+             ON CONFLICT (address)
+               DO UPDATE SET balance = wallets.balance + EXCLUDED.balance,
+                             updated_at = now()`,
+			op.To, amount,
+		); err != nil {
+			return 0, err
+		}
+	} else {
+
+		absAmt := -amount
+
+		res, err := tx.Exec(ctx,
+			`UPDATE wallets
+               SET balance = balance - $1, updated_at = $2
+             WHERE address = $3 AND balance >= $1`,
+			absAmt, now, op.To,
+		)
+
+		if err != nil {
+			return 0, err
+		}
+
+		if res.RowsAffected() == 0 {
+			if err := tx.Commit(ctx); err != nil {
+				return 0, err
+			}
+
+			var bal int
+			_ = tx.QueryRow(ctx,
+				`SELECT balance FROM wallets WHERE address = $1`, from,
+			).Scan(&bal)
+			return bal, fmt.Errorf("Insufficient funds on recipient")
+		}
+
+		if _, err := tx.Exec(ctx,
+			`UPDATE wallets
+			   SET balance = balance + $1, updated_at = $2
+			WHERE address = $3`,
+			absAmt, now, from,
+		); err != nil {
+			return 0, nil
+		}
+
 	}
 
 	var finalBal int
@@ -184,13 +179,6 @@ func (s *PostgresWalletStore) Transfer(ctx context.Context, from string, ops []T
 
 	if err := tx.Commit(ctx); err != nil {
 		return 0, err
-	}
-
-	if len(failed) > 0 {
-		return finalBal, fmt.Errorf(
-			"Insufficient funds for transaction(s): %v",
-			failed,
-		)
 	}
 
 	return finalBal, nil

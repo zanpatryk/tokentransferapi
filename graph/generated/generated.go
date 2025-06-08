@@ -47,7 +47,7 @@ type DirectiveRoot struct {
 
 type ComplexityRoot struct {
 	Mutation struct {
-		Transfer func(childComplexity int, fromAddress string, transfers []*TransferInput) int
+		Transfer func(childComplexity int, fromAddress string, transfers TransferInput) int
 	}
 
 	Query struct {
@@ -64,7 +64,7 @@ type ComplexityRoot struct {
 }
 
 type MutationResolver interface {
-	Transfer(ctx context.Context, fromAddress string, transfers []*TransferInput) (int, error)
+	Transfer(ctx context.Context, fromAddress string, transfers TransferInput) (int, error)
 }
 type QueryResolver interface {
 	Wallet(ctx context.Context, address string) (*Wallet, error)
@@ -100,7 +100,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.complexity.Mutation.Transfer(childComplexity, args["from_address"].(string), args["transfers"].([]*TransferInput)), true
+		return e.complexity.Mutation.Transfer(childComplexity, args["from_address"].(string), args["transfers"].(TransferInput)), true
 
 	case "Query.wallet":
 		if e.complexity.Query.Wallet == nil {
@@ -277,7 +277,7 @@ input TransferInput {
 
 type Mutation {
   # Transfer multiple amounts from one wallet to multiple recipients, atomically
-  transfer(from_address: ID!, transfers: [TransferInput!]!): BigInt!
+  transfer(from_address: ID!, transfers: TransferInput!): BigInt!
 }
 
 scalar BigInt
@@ -326,18 +326,18 @@ func (ec *executionContext) field_Mutation_transfer_argsFromAddress(
 func (ec *executionContext) field_Mutation_transfer_argsTransfers(
 	ctx context.Context,
 	rawArgs map[string]any,
-) ([]*TransferInput, error) {
+) (TransferInput, error) {
 	if _, ok := rawArgs["transfers"]; !ok {
-		var zeroVal []*TransferInput
+		var zeroVal TransferInput
 		return zeroVal, nil
 	}
 
 	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("transfers"))
 	if tmp, ok := rawArgs["transfers"]; ok {
-		return ec.unmarshalNTransferInput2ᚕᚖgithubᚗcomᚋzanpatrykᚋtokentransferapiᚋgraphᚋgeneratedᚐTransferInputᚄ(ctx, tmp)
+		return ec.unmarshalNTransferInput2githubᚗcomᚋzanpatrykᚋtokentransferapiᚋgraphᚋgeneratedᚐTransferInput(ctx, tmp)
 	}
 
-	var zeroVal []*TransferInput
+	var zeroVal TransferInput
 	return zeroVal, nil
 }
 
@@ -531,7 +531,7 @@ func (ec *executionContext) _Mutation_transfer(ctx context.Context, field graphq
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
 		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Mutation().Transfer(rctx, fc.Args["from_address"].(string), fc.Args["transfers"].([]*TransferInput))
+		return ec.resolvers.Mutation().Transfer(rctx, fc.Args["from_address"].(string), fc.Args["transfers"].(TransferInput))
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -3597,24 +3597,9 @@ func (ec *executionContext) marshalNTime2timeᚐTime(ctx context.Context, sel as
 	return res
 }
 
-func (ec *executionContext) unmarshalNTransferInput2ᚕᚖgithubᚗcomᚋzanpatrykᚋtokentransferapiᚋgraphᚋgeneratedᚐTransferInputᚄ(ctx context.Context, v any) ([]*TransferInput, error) {
-	var vSlice []any
-	vSlice = graphql.CoerceList(v)
-	var err error
-	res := make([]*TransferInput, len(vSlice))
-	for i := range vSlice {
-		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
-		res[i], err = ec.unmarshalNTransferInput2ᚖgithubᚗcomᚋzanpatrykᚋtokentransferapiᚋgraphᚋgeneratedᚐTransferInput(ctx, vSlice[i])
-		if err != nil {
-			return nil, err
-		}
-	}
-	return res, nil
-}
-
-func (ec *executionContext) unmarshalNTransferInput2ᚖgithubᚗcomᚋzanpatrykᚋtokentransferapiᚋgraphᚋgeneratedᚐTransferInput(ctx context.Context, v any) (*TransferInput, error) {
+func (ec *executionContext) unmarshalNTransferInput2githubᚗcomᚋzanpatrykᚋtokentransferapiᚋgraphᚋgeneratedᚐTransferInput(ctx context.Context, v any) (TransferInput, error) {
 	res, err := ec.unmarshalInputTransferInput(ctx, v)
-	return &res, graphql.ErrorOnPath(ctx, err)
+	return res, graphql.ErrorOnPath(ctx, err)
 }
 
 func (ec *executionContext) marshalNWallet2ᚕᚖgithubᚗcomᚋzanpatrykᚋtokentransferapiᚋgraphᚋgeneratedᚐWalletᚄ(ctx context.Context, sel ast.SelectionSet, v []*Wallet) graphql.Marshaler {
