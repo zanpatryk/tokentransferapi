@@ -16,7 +16,7 @@ type WalletStore interface {
 
 	CreateIfNotExists(ctx context.Context, address string, initialBalance int) (*generated.Wallet, error)
 
-	Transfer(ctx context.Context, from string, transfers []TransferOp) (int, error)
+	Transfer(ctx context.Context, from string, transfer TransferOp) (int, error)
 }
 
 type InMemWalletStore struct {
@@ -101,7 +101,7 @@ func (s *InMemWalletStore) CreateIfNotExists(ctx context.Context, address string
 	}, nil
 }
 
-func (s *InMemWalletStore) Transfer(ctx context.Context, from string, transfers []TransferOp) (int, error) {
+func (s *InMemWalletStore) Transfer(ctx context.Context, from string, op TransferOp) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -112,51 +112,40 @@ func (s *InMemWalletStore) Transfer(ctx context.Context, from string, transfers 
 	}
 
 	now := time.Now().UTC()
-	failed := make([]int, 0, len(transfers))
 
-	for _, op := range transfers {
-		toAddr, rawAmt := op.To, op.Amount
+	toAddr, rawAmt := op.To, op.Amount
 
-		if rawAmt >= 0 {
+	if rawAmt >= 0 {
 
-			if senderW.Balance < rawAmt {
-				failed = append(failed, rawAmt)
-				continue
-			}
-
-			senderW.Balance -= rawAmt
-
-			recW, ok := s.wallets[toAddr]
-			if !ok {
-				failed = append(failed, rawAmt)
-				senderW.Balance += rawAmt
-				continue
-			}
-
-			recW.Balance += rawAmt
-			recW.UpdatedAt = now
-		} else {
-			absAmt := -rawAmt
-
-			recW, exists := s.wallets[toAddr]
-
-			if !exists || recW.Balance < absAmt {
-				failed = append(failed, rawAmt)
-				continue
-			}
-
-			recW.Balance -= absAmt
-			recW.UpdatedAt = now
-
-			senderW.Balance += absAmt
+		if senderW.Balance < rawAmt {
+			return 0, fmt.Errorf("insufficient funds")
 		}
+
+		senderW.Balance -= rawAmt
+
+		recW, ok := s.wallets[toAddr]
+		if !ok {
+			senderW.Balance += rawAmt
+		}
+
+		recW.Balance += rawAmt
+		recW.UpdatedAt = now
+	} else {
+		absAmt := -rawAmt
+
+		recW, exists := s.wallets[toAddr]
+
+		if !exists || recW.Balance < absAmt {
+			return 0, fmt.Errorf("insufficient funds")
+		}
+
+		recW.Balance -= absAmt
+		recW.UpdatedAt = now
+
+		senderW.Balance += absAmt
 	}
 
 	senderW.UpdatedAt = now
-
-	if len(failed) > 0 {
-		return senderW.Balance, fmt.Errorf("Insufficient funds for transaction(s): %v", failed)
-	}
 
 	return senderW.Balance, nil
 }

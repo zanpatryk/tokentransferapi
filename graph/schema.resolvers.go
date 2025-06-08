@@ -13,23 +13,17 @@ import (
 )
 
 // Transfer is the resolver for the transfer field.
-func (r *mutationResolver) Transfer(ctx context.Context, fromAddress string, transfers []*generated.TransferInput) (int, error) {
-	ops := make([]store.TransferOp, len(transfers))
-
-	for i, t := range transfers {
-		ops[i] = store.TransferOp{
-			To:     t.ToAddress,
-			Amount: t.Amount,
-		}
+func (r *mutationResolver) Transfer(ctx context.Context, fromAddress string, transfer generated.TransferInput) (int, error) {
+	op := store.TransferOp{
+		To:     transfer.ToAddress,
+		Amount: transfer.Amount,
 	}
 
-	newBalance, err := r.Store.Transfer(ctx, fromAddress, ops)
-
+	newBalance, err := r.Store.Transfer(ctx, fromAddress, op)
 	if err != nil {
 		return newBalance, fmt.Errorf("Transfer failed: %w", err)
 	}
-
-	return newBalance, nil
+	return newBalance, err
 }
 
 // Wallet is the resolver for the wallet field.
