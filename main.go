@@ -2,16 +2,28 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
 	"net/http"
 	"os"
 
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/playground"
+	"github.com/golang-migrate/migrate/v4"
+	postgresDriver "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 	"github.com/zanpatryk/tokentransferapi/graph"
 	"github.com/zanpatryk/tokentransferapi/graph/generated"
 	"github.com/zanpatryk/tokentransferapi/store"
 )
+
+func init() {
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found!")
+	}
+}
 
 func main() {
 
@@ -21,19 +33,61 @@ func main() {
 		port = "8080"
 	}
 
-	memStore := store.NewInMemWalletStore()
+	dbUrl := os.Getenv("DATABASE_URL")
+	if dbUrl == "" {
+		log.Fatal("DATABASE_URL is not set !")
+	}
 
-	_, err := memStore.CreateIfNotExists(
+	migrationsPath := os.Getenv("MIGRATIONS_PATH")
+	if migrationsPath == "" {
+		log.Fatal("MIGRATIONS_PATH must be set")
+	}
+
+	sqlDB, errSql := sql.Open("postgres", dbUrl)
+	if errSql != nil {
+		log.Fatalf("could not open sql.DB: %v", errSql)
+
+	}
+	defer sqlDB.Close()
+
+	driver, err := postgresDriver.WithInstance(sqlDB, &postgresDriver.Config{})
+	if err != nil {
+		log.Fatalf("could not create migrate driver: %v", err)
+	}
+
+	m, err := migrate.NewWithDatabaseInstance(
+		"file://"+migrationsPath,
+		"postgres",
+		driver,
+	)
+	if err != nil {
+		log.Fatalf("failed to initialize migrations: %v", err)
+	}
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		log.Fatalf("migration failed: %v", err)
+	}
+	log.Println("Database migrations applied")
+
+	pool, err := pgxpool.New(context.Background(), dbUrl)
+	if err != nil {
+		log.Fatalf("failed to connect to Postgres pool: %v", err)
+	}
+	defer pool.Close()
+
+	resolverStore := store.NewPostgresWalletStore(pool)
+
+	_, errMem := resolverStore.CreateIfNotExists(
 		context.Background(),
 		"0x0000000000000000000000000000000000000000",
 		10,
 	)
 
-	if err != nil {
-		log.Fatalf("Failed to set initial wallet: %v", err)
+	if errMem != nil {
+		log.Fatalf("Failed to set initial wallet: %v", errMem)
 	}
 
-	_, err2 := memStore.CreateIfNotExists(
+	_, err2 := resolverStore.CreateIfNotExists(
 		context.Background(),
 		"0x0000000000000000000000000000000000000001",
 		10,
@@ -43,11 +97,9 @@ func main() {
 		log.Fatalf("Failed to set initial wallet: %v", err)
 	}
 
-	resolver := &graph.Resolver{Store: memStore}
-
 	server := handler.NewDefaultServer(
 		generated.NewExecutableSchema(
-			generated.Config{Resolvers: resolver},
+			generated.Config{Resolvers: &graph.Resolver{Store: resolverStore}},
 		),
 	)
 
