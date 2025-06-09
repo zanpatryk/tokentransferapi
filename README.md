@@ -24,7 +24,6 @@ tokentransfer/
 ├── .dockerignore
 ├── .env               # Environment variables (create from .env.example)
 ├── .env.example       # Sample configuration
-├── .gitignore
 ├── Dockerfile         # Build Docker image
 ├── Dockerfile.test    # Build image for running tests
 ├── docker-compose.yml       # App + Postgres services
