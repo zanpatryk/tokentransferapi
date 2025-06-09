@@ -13,3 +13,7 @@ resolver:
   layout: follow-schema
   dir: graph
   package: graph
+
+models:
+  BigInt:
+    model: github.com/99designs/gqlgen/graphql.Int

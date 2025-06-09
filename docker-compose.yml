@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: tokentransfer_db
+      POSTGRES_HOST_AUTH_METHOD: trust
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      MIGRATIONS_PATH: ${MIGRATIONS_PATH}
+      PORT: ${PORT}
+    ports:
+      - "8080:8080"
+    restart: on-failure
+    working_dir: /app
+    command: ["./tokentransfer"]
+    
+volumes:
+  pgdata:
