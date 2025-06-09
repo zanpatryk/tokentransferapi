@@ -77,24 +77,34 @@ func main() {
 
 	resolverStore := store.NewPostgresWalletStore(pool)
 
-	_, errMem := resolverStore.CreateIfNotExists(
+	_, errAddr1 := resolverStore.CreateIfNotExists(
 		context.Background(),
 		"0x0000000000000000000000000000000000000000",
-		10,
+		1000,
 	)
 
-	if errMem != nil {
-		log.Fatalf("Failed to set initial wallet: %v", errMem)
+	if errAddr1 != nil {
+		log.Fatalf("Failed to set initial wallet: %v", errAddr1)
 	}
 
-	_, err2 := resolverStore.CreateIfNotExists(
+	_, errAddr2 := resolverStore.CreateIfNotExists(
 		context.Background(),
 		"0x0000000000000000000000000000000000000001",
-		10,
+		1000,
 	)
 
-	if err2 != nil {
-		log.Fatalf("Failed to set initial wallet: %v", err)
+	if errAddr2 != nil {
+		log.Fatalf("Failed to set initial wallet: %v", errAddr2)
+	}
+
+	_, errAddr3 := resolverStore.CreateIfNotExists(
+		context.Background(),
+		"0x0000000000000000000000000000000000000002",
+		1000,
+	)
+
+	if errAddr3 != nil {
+		log.Fatalf("Failed to set initial wallet: %v", errAddr3)
 	}
 
 	server := handler.NewDefaultServer(
